@@ -1,0 +1,201 @@
+import { CircleCheck, FlaskConical, Info, Lightbulb, TriangleAlert } from "lucide-react";
+import { RISK_ORDER } from "@/data/constants";
+import { cn } from "@/utils/cn";
+import { formatPercent } from "@/utils/format";
+import Card from "./Card";
+import RiskBadge, { Badge, StatusBadge } from "./RiskBadge";
+
+/* ------------------------- building blocks ------------------------- */
+
+export function MetricTile({ label, children, className }) {
+  return (
+    <div className={cn("flex flex-col justify-between gap-3 rounded-xl border border-line bg-elevated/50 p-4", className)}>
+      <p className="text-xs font-semibold uppercase tracking-wider text-subtle">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+/** Circular confidence gauge (value 0..1). */
+export function ConfidenceRing({ value, size = 64 }) {
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="flex items-center gap-3">
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg viewBox="0 0 64 64" className="-rotate-90" width={size} height={size} aria-hidden>
+          <circle cx="32" cy="32" r={r} fill="none" stroke="var(--line)" strokeWidth="6" />
+          <circle
+            cx="32"
+            cy="32"
+            r={r}
+            fill="none"
+            stroke="var(--c-cyan)"
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={c * (1 - value)}
+            className="transition-all duration-1000"
+          />
+        </svg>
+        <span className="absolute inset-0 grid place-items-center text-sm font-bold text-fg">{formatPercent(value)}</span>
+      </div>
+      <p className="text-xs leading-snug text-subtle">
+        Simulated
+        <br />
+        score
+      </p>
+    </div>
+  );
+}
+
+/** Three-segment risk gauge. */
+export function RiskMeter({ level }) {
+  const active = RISK_ORDER.indexOf(level);
+  const colors = ["bg-ok", "bg-warn", "bg-danger"];
+  return (
+    <div className="flex gap-1.5" aria-hidden>
+      {RISK_ORDER.map((key, i) => (
+        <span key={key} className={cn("h-1.5 flex-1 rounded-full", i <= active ? colors[active] : "bg-line")} />
+      ))}
+    </div>
+  );
+}
+
+/** Per-category score bars (Toxic, Insult, Threat, Identity-Based Hate, Offensive). */
+export function CategoryBreakdown({ categories, riskLevel }) {
+  const hot = riskLevel === "high" ? "danger" : "warn";
+  const tone = {
+    danger: { box: "border-danger/30 bg-danger/5", bar: "bg-danger", text: "text-danger" },
+    warn: { box: "border-warn/30 bg-warn/5", bar: "bg-warn", text: "text-warn" },
+  }[hot];
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {categories.map((c) => (
+        <div
+          key={c.key}
+          className={cn("rounded-xl border p-3.5 transition-colors", c.detected ? tone.box : "border-line bg-elevated/40")}
+        >
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="flex min-w-0 items-center gap-2 font-medium text-fg">
+              {c.detected ? (
+                <TriangleAlert size={15} className={cn("shrink-0", tone.text)} aria-hidden />
+              ) : (
+                <CircleCheck size={15} className="shrink-0 text-ok" aria-hidden />
+              )}
+              <span className="truncate">{c.label}</span>
+            </span>
+            <span className="text-xs font-semibold tabular-nums text-muted">{Math.round(c.score * 100)}%</span>
+          </div>
+          <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-line">
+            <div
+              className={cn("h-full rounded-full", c.detected ? tone.bar : "bg-ok/60")}
+              style={{ width: `${Math.max(3, c.score * 100)}%` }}
+            />
+          </div>
+          <p className={cn("mt-1.5 text-xs", c.detected ? cn("font-semibold", tone.text) : "text-subtle")}>
+            {c.detected ? "Detected" : "Not detected"}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Titled sub-section inside a result. */
+export function SectionBlock({ title, icon: Icon, aside, children, className }) {
+  return (
+    <section className={className}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-fg">
+          {Icon && <Icon size={16} className="text-aqua" aria-hidden />}
+          {title}
+        </h3>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function Disclaimer({ children }) {
+  return (
+    <div className="flex gap-3 rounded-xl border border-warn/30 bg-warn/10 p-4" role="note">
+      <Info size={18} className="mt-0.5 shrink-0 text-warn" aria-hidden />
+      <p className="text-sm leading-relaxed text-muted">
+        <strong className="font-semibold text-fg">Simulated result – human review required. </strong>
+        {children ??
+          "This output is generated by a frontend demo simulator, not a trained AI model. It must not be used to make decisions about real people without review by a human moderator."}
+      </p>
+    </div>
+  );
+}
+
+/* ----------------------------- main card ----------------------------- */
+
+/**
+ * Shared result layout for text, image and multimodal analyses.
+ * Extra content (highlighted text, OCR output, previews…) goes in `children`.
+ */
+export default function ResultCard({
+  result,
+  title = "Analysis Result",
+  explanationTitle = "Explanation",
+  statusLabel,
+  confidenceLabel = "Confidence Score",
+  disclaimer,
+  children,
+}) {
+  const harmful = result.status === "harmful";
+
+  return (
+    <Card className="animate-fade-up space-y-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold text-fg">{title}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          {result.scanId && <Badge tone="neutral">{result.scanId}</Badge>}
+          <Badge tone="iris" icon={FlaskConical}>
+            Simulated result
+          </Badge>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricTile label={statusLabel ?? "Detection Status"}>
+          <div>
+            <StatusBadge status={result.status} riskLevel={result.riskLevel} className="px-3 py-1.5 text-sm" />
+            <p className="mt-2 text-xs text-subtle">
+              {harmful ? "Potentially harmful content flagged" : "No harmful patterns flagged"}
+            </p>
+          </div>
+        </MetricTile>
+
+        <MetricTile label="Risk Level">
+          <div className="space-y-3">
+            <RiskBadge level={result.riskLevel} className="px-3 py-1.5 text-sm" />
+            <RiskMeter level={result.riskLevel} />
+          </div>
+        </MetricTile>
+
+        <MetricTile label={confidenceLabel}>
+          <ConfidenceRing value={result.confidence} />
+        </MetricTile>
+      </div>
+
+      <SectionBlock title="Detected Categories">
+        <CategoryBreakdown categories={result.categories} riskLevel={result.riskLevel} />
+      </SectionBlock>
+
+      {children}
+
+      <SectionBlock title={explanationTitle} icon={Lightbulb}>
+        <p className="rounded-xl border border-line bg-elevated/50 p-4 text-sm leading-relaxed text-muted">
+          {result.explanation}
+        </p>
+      </SectionBlock>
+
+      <Disclaimer>{disclaimer}</Disclaimer>
+    </Card>
+  );
+}
